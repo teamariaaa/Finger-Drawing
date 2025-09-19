@@ -101,17 +101,22 @@ hands = mp_hands.Hands(
     min_tracking_confidence=0.7
 )
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
+cap.set(cv2.CAP_PROP_FPS, 60)
 
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 cv2.resizeWindow(WINDOW_NAME, 1280, 720)
 
 canvas = None
+prev_idx_tip = None
 prev_pt = None
 ema_pt = None
 show_target = True
 target_mask = None
 fullscreen = False
+drawing_now = False
+fingertip_px = None
+pinch_val = None
 
 while True:
     ok, frame = cap.read()
@@ -125,14 +130,26 @@ while True:
         canvas = np.zeros_like(frame)
         target_mask = load_target_mask(frame.shape, TARGET_PATH)
 
+    
     result = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    drawing_now = False
-    fingertip_px = None
-    pinch_val = None
 
     if result.multi_hand_landmarks:
+
         lm = result.multi_hand_landmarks[0].landmark
+
+        print(drawing_now, prev_idx_tip)
+        if drawing_now and prev_idx_tip is not None:
+            chosen_hand = min(
+                result.multi_hand_landmarks,
+                key=lambda hand: (
+                    (hand.landmark[8].x - prev_idx_tip[0])**2 +
+                    (hand.landmark[8].y - prev_idx_tip[1])**2
+                )
+            )
+            lm = chosen_hand.landmark
+            
         idx_tip = (lm[8].x, lm[8].y)
+        prev_idx_tip = idx_tip
         thumb_tip = (lm[4].x, lm[4].y)
         pinch_val = norm_dist(idx_tip, thumb_tip)
         fingertip_px = to_px(idx_tip, w, h)
